@@ -15,8 +15,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SearchView
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
-import com.example.mapapp.ui.MyClass.LineData
-import com.example.mapapp.ui.OverlayIconBus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -42,7 +40,7 @@ class MainActivity : AppCompatActivity() {
         Manifest.permission.WRITE_EXTERNAL_STORAGE,
         Manifest.permission.ACCESS_COARSE_LOCATION
     )
-    private lateinit var map : MapView
+    private lateinit var map: MapView
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
@@ -95,7 +93,7 @@ class MainActivity : AppCompatActivity() {
                     val searchView: SearchView = findViewById(R.id.searchView)
                     val listView: ListView = findViewById(R.id.listView)
                     val textViewResult: TextView = findViewById(R.id.textViewResult)
-                    val textClickOnIcon : TextView = findViewById(R.id.textViewAlert)
+                    val textClickOnIcon: TextView = findViewById(R.id.textViewAlert)
 
                     // Botão de voltar para a tela anterior
                     buttonBack.setOnClickListener {
@@ -220,6 +218,7 @@ class MainActivity : AppCompatActivity() {
                                 }
                                 return true
                             }
+
                             override fun onQueryTextChange(newText: String?): Boolean {
                                 // Implementação opcional. Pode ser usado para busca em tempo real enquanto o usuário digita.
                                 return false
@@ -229,20 +228,30 @@ class MainActivity : AppCompatActivity() {
 
                     // Buscar parada de ônibus
                     buttonStops.setOnClickListener {
-                        searchView.visibility = View.VISIBLE
-                        buttonBack.visibility = View.VISIBLE
+                        runOnUiThread{
                         buttonVehiclePositions.visibility = View.GONE
                         buttonLines.visibility = View.GONE
                         buttonStops.visibility = View.GONE
                         buttonArrivalForecast.visibility = View.GONE
-                        searchView.queryHint = "Digite o código da parada"
+                        searchView.visibility = View.VISIBLE
+                        buttonBack.visibility = View.VISIBLE
+                        }
                         searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
                             override fun onQueryTextSubmit(query: String?): Boolean {
                                 if (!query.isNullOrEmpty()) {
                                     lifecycleScope.launch(Dispatchers.IO) {
-                                        val stopResponse = service.getStop(apiCredentials, query).execute()
+                                        val stopResponse =
+                                            service.getStop(apiCredentials, query).execute()
                                         val stops = stopResponse.body()
-                                        mapController.setCenter(GeoPoint(stops?.get(0)?.py!!, stops.get(0).px))
+                                        runOnUiThread{
+                                            mapController.setCenter(
+                                                GeoPoint(
+                                                    stops?.get(0)?.py!!,
+                                                    stops.get(0).px
+                                                )
+                                            )
+                                        }
+
                                         println(stops)
                                         stops?.forEach() { stop ->
                                             items.add(
@@ -254,67 +263,84 @@ class MainActivity : AppCompatActivity() {
                                                     setMarker(resources.getDrawable(R.drawable.bus_stop))
                                                 })
                                         }
-                            var overlay =
-                                ItemizedOverlayWithFocus<OverlayItem>(this@MainActivity, items,
-                                    object : ItemizedIconOverlay.OnItemGestureListener<OverlayItem> {
-                                        override fun onItemSingleTapUp(
-                                            index: Int,
-                                            item: OverlayItem
-                                        ): Boolean {
-                                            val stopCode = items[index].snippet
-                                            val stopName = items[index].title
-                                            AlertDialog.Builder(this@MainActivity).apply {
-                                                setTitle("Confirmação")
-                                                setMessage("Deseja ver próximo ônibus que chegará na $stopName?")
-                                                setPositiveButton("Sim") { dialog, which ->
-                                                    // Simula o clique no botão se o usuário confirmar
-                                                    buttonArrivalForecast.performClick()
-                                                    searchView.setQuery(stopCode, true) // Define o código da parada na barra de pesquisa e submete a consulta
-                                                    searchView.setQuery("", false)
-                                                    searchView.visibility = View.GONE
-                                                }
-                                                setNegativeButton("Não", null)
+
+                                        var overlay =
+                                            ItemizedOverlayWithFocus<OverlayItem>(this@MainActivity,
+                                                items,
+                                                object :
+                                                    ItemizedIconOverlay.OnItemGestureListener<OverlayItem> {
+                                                    override fun onItemSingleTapUp(
+                                                        index: Int,
+                                                        item: OverlayItem
+                                                    ): Boolean {
+                                                        val stopCode = items[index].snippet
+                                                        val stopName = items[index].title
+                                                        AlertDialog.Builder(this@MainActivity)
+                                                            .apply {
+                                                                setTitle("Confirmação")
+                                                                setMessage("Deseja ver próximo ônibus que chegará na $stopName?")
+                                                                setPositiveButton("Sim") { dialog, which ->
+                                                                    // Simula o clique no botão se o usuário confirmar
+                                                                    buttonArrivalForecast.performClick()
+                                                                    searchView.setQuery(
+                                                                        stopCode,
+                                                                        true
+                                                                    ) // Define o código da parada na barra de pesquisa e submete a consulta
+                                                                    searchView.setQuery("", false)
+                                                                    //                                                    searchView.visibility = View.GONE
+                                                                }
+                                                                setNegativeButton("Não", null)
+                                                                show()
+                                                            }
+                                                        return true
+                                                    }
+
+                                                    override fun onItemLongPress(
+                                                        index: Int,
+                                                        item: OverlayItem
+                                                    ): Boolean {
+                                                        return false
+                                                    }
+                                                })
+                                        // Adicionar overlay no mapa
+                                        overlay.setFocusItemsOnTap(true);
+                                        map.overlays.add(overlay);
+
+                                        runOnUiThread {
+                                            textClickOnIcon.visibility = View.VISIBLE
+                                            listView.visibility = View.GONE
+                                            map.visibility = View.VISIBLE
+                                            buttonBack.visibility = View.VISIBLE
+                                            textViewResult.visibility = View.GONE
+                                            buttonVehiclePositions.visibility = View.GONE
+                                            buttonLines.visibility = View.GONE
+                                            buttonStops.visibility = View.GONE
+                                            buttonArrivalForecast.visibility = View.GONE
+                                            searchView.visibility = View.GONE
+                                        }
+                                    }
+                                }else{
+                                    runOnUiThread {
+                                        AlertDialog.Builder(this@MainActivity)
+                                            .apply {
+                                                setTitle("Erro")
+                                                setMessage("Digite um código de parada válido")
+                                                setPositiveButton("Ok", null)
                                                 show()
                                             }
-                                            return true
-                                        }
-
-                                        override fun onItemLongPress(
-                                            index: Int,
-                                            item: OverlayItem
-                                        ): Boolean {
-                                            return false
-                                        }
-                                    })
-                            // Adicionar overlay no mapa
-                            overlay.setFocusItemsOnTap(true);
-                            map.overlays.add(overlay);
-
-                            runOnUiThread {
-                                textClickOnIcon.visibility = View.VISIBLE
-                                listView.visibility = View.GONE
-                                map.visibility = View.VISIBLE
-                                buttonBack.visibility = View.VISIBLE
-                                textViewResult.visibility = View.GONE
-                                buttonVehiclePositions.visibility = View.GONE
-                                buttonLines.visibility = View.GONE
-                                buttonStops.visibility = View.GONE
-                                buttonArrivalForecast.visibility = View.GONE
-                                searchView.visibility = View.GONE
+                                    }
+                                }
+                                searchView.clearFocus()
+                                searchView.setQuery("", false)
+                                return true
                             }
-                        }
-                    }
-                searchView.clearFocus()
-                searchView.setQuery("", false)
-                return true
-            }
-            override fun onQueryTextChange(newText: String?): Boolean {
-                // Implementação opcional. Pode ser usado para busca em tempo real enquanto o usuário digita.
-                return false
-                        }
-                    })
-                }
 
+                            override fun onQueryTextChange(newText: String?): Boolean {
+                                // Implementação opcional. Pode ser usado para busca em tempo real enquanto o usuário digita.
+                                return false
+                            }
+                        })
+                    }
 
                     // Previsão de chegada
                     buttonArrivalForecast.setOnClickListener {
@@ -330,10 +356,12 @@ class MainActivity : AppCompatActivity() {
                             override fun onQueryTextSubmit(query: String?): Boolean {
                                 if (!query.isNullOrEmpty()) {
                                     lifecycleScope.launch(Dispatchers.IO) {
-                                        val forecastResponse = service.getForecastStop(apiCredentials, query).execute()
+                                        val forecastResponse =
+                                            service.getForecastStop(apiCredentials, query).execute()
                                         val forecastStop = forecastResponse.body()
                                         forecastStop?.let {
-                                            var textResult = "Ponto de parada: ${forecastStop.p.np} \n" +
+                                            var textResult =
+                                                "Ponto de parada: ${forecastStop.p.np} \n" +
                                                         "Local: ${forecastStop.p.py}, ${forecastStop.p.px})"
                                             forecastStop.p.l.forEach { line ->
                                                 textResult += "\nLinha: ${line.c} Sentido: ${line.sl}, Destino: ${line.lt0}, Origem: ${line.lt1}"
@@ -357,12 +385,14 @@ class MainActivity : AppCompatActivity() {
                                 searchView.setQuery("", false)
                                 return true
                             }
+
                             override fun onQueryTextChange(newText: String?): Boolean {
                                 // Implementação opcional. Pode ser usado para busca em tempo real enquanto o usuário digita.
                                 return false
                             }
                         }
-                    )}
+                        )
+                    }
 
                 } else {
                     println("Error authenticating: ${authResponse.errorBody()}")
@@ -372,6 +402,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
     }
+
     private fun hasPermissions(permissions: Array<String>): Boolean = permissions.all {
         ActivityCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
     }
@@ -386,7 +417,11 @@ class MainActivity : AppCompatActivity() {
         map.onPause()
     }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PERMISSIONS_REQUEST_CODE) {
             if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
